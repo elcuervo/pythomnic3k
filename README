@@ -1,0 +1,284 @@
+Pythomnic3k project, http://www.pythomnic3k.org/
+Distributed under BSD license
+
+Pythomnic3k is a Python 3 framework for rapid development of network
+services, SOA, EAI middleware and distributed applications.
+
+This package contains the basic installation of Pythomnic3k framework.
+It contains just the framework itself, but all the supported protocols,
+such as HTTP or JMS need to be downloaded separately as "protocol packs".
+
+HOW TO INSTALL
+~~~~~~~~~~~~~~
+
+1. Make sure you have the following prerequisites installed:
+
+   * OpenSSL 0.9.8x (with threads). This is typically present, but at least
+     in FreeBSD it by default comes without thread support and needs to be
+     installed or rebuilt. http://www.openssl.org/
+
+   * Python 3.x (with threads). It is new and hardly installed by default
+     in any of today OSes. Use your package manager to install or download
+     it and build manually with the above OpenSSL and thread support.
+     http://www.python.org/
+
+   * (optional) Oracle BerkeleyDB 4.4+. Use your package manager to install
+     or alternatively download it and build manually. http://www.oracle.com/
+
+   * (optional) PyBSDDB 4.7.3+, BerkeleyDB library for Python 3.x.
+     http://www.jcea.es/programacion/pybsddb.htm
+
+     If you are using Windows, you can build BerkeleyDB/PyBSDDB manually,
+     or you can use pre-built binaries from the separate WIN32 pack
+     pythomnic3k-win32-1.1.tar.gz
+
+   You can run Pythomnic3k without BerkeleyDB and PyBSDDB, but doing so
+   will render some of its key features unavailable.
+
+2. Unpack the package to a directory of your choice.
+
+   >>>   /usr/local$ tar zxf pythomnic3k-1.1.tar.gz
+
+HOW TO START/STOP
+~~~~~~~~~~~~~~~~~
+
+1. The basic building block of Pythomnic3k application is called a "cage",
+   it is a *named* application component running in a separate Python process.
+   Therefore, first you have to pick a name for a new cage, ex. "runner".
+
+2. Create an empty directory which will contain the new cage's modules:
+
+   >>>   /usr/local/pythomnic3k$ mkdir cages/runner
+
+3. Technically this empty directory is already sufficient to run the cage:
+
+   >>>   /usr/local/pythomnic3k$ python startup.py runner &
+   <<<   [1] 53251
+
+4. Now you should see two Python processes running:
+
+   >>>   /usr/local/pythomnic3k$ ps ax | grep runner
+   <<<   53251  python startup.py runner
+   <<<   53254  /usr/local/bin/python /usr/local/pythomnic3k/startup.py - hostname runner INFO NORMAL
+
+   The first one (pid 53251) is a primary startup monitor, it does not execute
+   actual application code, its function is to start up the secondary process
+   (pid 53254) that does and wait for it to exit. If the secondary process
+   exits with failure (ex. dumps core), the primary startup process is also
+   responsible for restarting it.
+
+5. As the cage runs, it records its activity in its private log files:
+
+   >>>   /usr/local/pythomnic3k$ tail cages/runner/logs/runner-yyyymmdd.log
+   <<<   HH:MM:SS.ZZ MSG [startup] the cage is starting up
+   <<<   HH:MM:SS.ZZ MSG [cage] loading module startup from /usr/local/pythomnic3k/cages/.shared/startup.py
+   <<<   ...
+   <<<   HH:MM:SS.ZZ MSG [cage] module protocol_retry has been loaded
+   <<<   HH:MM:SS.ZZ MSG [cage] interface retry has started
+
+6. To initiate the cage shutdown, kill the primary startup process (pid 53251)
+   using the pid file it keeps along with the logs:
+
+   >>>   /usr/local/pythomnic3k$ kill `cat cages/runner/logs/runner.pid`
+   <<<   [1] Terminated python startup.py runner
+
+   In few seconds the cage shuts down:
+
+   >>>   /usr/local/pythomnic3k$ tail cages/runner/logs/runner-yyyymmdd.log
+   <<<   ...
+   <<<   HH:MM:SS.ZZ MSG [cage] interface retry has stopped
+   <<<   HH:MM:SS.ZZ MSG [startup] the cage has been properly shut down
+
+7. In the course of application development with Pythomnic3k more than one
+   cage can and should be started, this capability of easily partitioning
+   the application into cages - modules running in different processes and
+   possibly on different servers is in fact the main feature of Pythomnic3k.
+   The cages are independent, to run more of them, create each a subdirectory
+   in cages/ and follow the above procedure.
+
+HOW TO MAKE SOMETHING USEFUL
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. This package contains just the framework itself, it is capable of running
+   cages and make them find and call each other. But for cages to be able to
+   accept calls from the clients and to connect to other systems, such as
+   databases, certain protocol support is required. Protocol supporting
+   modules are grouped into separate packages called "protocol packs", one
+   pack per protocol and you need to download them separately and unpack to
+   the same directory where Pythomnic3k is installed.
+
+2. Decide, requests over which protocol the new cage is going to serve. In
+   this example it is HTTP. Download protocol pack pythomnic3k-http-1.1.tar.gz
+   and unpack it:
+
+   >>>   /usr/local$ tar zxf pythomnic3k-http-1.1.tar.gz
+
+3. All the cage's modules reside in its private directory, which is initially
+   empty. Sometimes you create the modules from scratch, but sometimes you
+   need to copy existing default/template modules from cages/.shared to the
+   cage directory and edit the copies. The first module to emerge in this way
+   is config_interfaces.py, which among other things contains the list of
+   interfaces enabled on a cage:
+
+   >>>   /usr/local/pythomnic3k$ cp cages/.shared/config_interfaces.py cages/runner
+
+   Edit the copy to add a new named instance of HTTP interface. More than one
+   interface even for the same protocol can be enabled under different names.
+
+   >>>   /usr/local/pythomnic3k$ vi cages/runner/config_interfaces.py
+   ...   interfaces = ("performance", "rpc", "retry", "my_http"),
+   ...                                                 ^^^^^^^ interface name
+
+4. Copy two interface-related files from .shared to runner:
+
+   >>> /usr/local/pythomnic3k$ cp cages/.shared/config_interface_http_1.py \
+                                  cages/runner/config_interface_my_http.py
+				                                ^^^^^^^
+   >>> /usr/local/pythomnic3k$ cp cages/.shared/interface_http_1.py \
+                                  cages/runner/interface_my_http.py
+                                                         ^^^^^^^ interface name
+5. Edit the interface configuration module as necessary:
+
+   >>>   /usr/local/pythomnic3k$ vi cages/runner/config_interface_my_http.py
+   ...   listener_address = ("0.0.0.0", 8080),
+                                        ^^^^ port to listen at
+
+6. Start the cage:
+
+   >>>   /usr/local/pythomnic3k$ python startup.py runner &
+   <<<   [1] 29712
+
+7. Examine the log to make sure the interface has been started:
+
+   >>>   /usr/local/pythomnic3k$ tail cages/runner/logs/runner-yyyymmdd.log
+   <<<   HH:MM:SS.ZZ MSG [my_http:lsn] started listening for connections at 0.0.0.0:8080
+   <<<   HH:MM:SS.ZZ MSG [cage] interface my_http has started
+
+8. Point your browser to http://localhost:8080/ to make sure HTTP is served:
+
+   <<<   Pythomnic3k HTTP server is up and running:
+   <<<   URL: /
+
+9. The actual processing of the requests incoming to a cage always begins
+   at interface-specific modules, in this example it is interface_my_http.py,
+   the template implementation for which you had copied from .shared. Edit
+   the module:
+
+   >>>   /usr/local/pythomnic3k$ vi cages/runner/interface_my_http.py
+   ...   def process_request(request: dict, response: dict):
+   ...       response["headers"]["content-type"] = "text/html"
+   ...       response["content"] = "Hello, world !"
+
+   and save it.
+
+10. Click "Reload" in your browser.
+
+   <<<   Hello, world !
+
+   Note that there is no need to restart the cage as Pythomnic3k reloads
+   modified modules transparently.
+
+HOW TO USE MULTIPLE CAGES
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. If you are using Windows, skip this step and proceed to step 2.
+   Otherwise, copy two configuration files from .shared and edit the
+   copies.
+
+   >>>   /usr/local/pythomnic3k$ cp cages/.shared/config_interface_rpc.py cages/runner
+   >>>   /usr/local/pythomnic3k$ vi cages/runner/config_interface_rpc.py
+   ...   broadcast_address = ("192.168.1.165/192.168.1.255", 12480)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^ write your actual address here
+
+   >>>   /usr/local/pythomnic3k$ cp cages/.shared/config_resource_rpc.py cages/runner
+   >>>   /usr/local/pythomnic3k$ vi cages/runner/config_resource_rpc.py
+   ...   broadcast_address = ("192.168.1.165/192.168.1.255", 12480)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^ write your actual address here
+
+2. Create another cage, ex. "worker":
+
+   >>>   /usr/local/pythomnic3k$ mkdir cages/worker
+
+3. Unless using Windows, repeat step 1 for the new cage:
+
+   >>>   /usr/local/pythomnic3k$ cp cages/.shared/config_interface_rpc.py cages/worker
+   >>>   /usr/local/pythomnic3k$ vi cages/worker/config_interface_rpc.py
+   ...   broadcast_address = ("192.168.1.165/192.168.1.255", 12480)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^ write your actual address here
+
+   >>>   /usr/local/pythomnic3k$ cp cages/.shared/config_resource_rpc.py cages/worker
+   >>>   /usr/local/pythomnic3k$ vi cages/worker/config_resource_rpc.py
+   ...   broadcast_address = ("192.168.1.165/192.168.1.255", 12480)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^ write your actual address here
+
+4. Start the new cage:
+
+   >>>   /usr/local/pythomnic3k$ python startup.py worker &
+   <<<   [2] 29778
+
+5. Edit and save the request processing module of cage runner:
+
+   >>>   /usr/local/pythomnic3k$ vi cages/runner/interface_my_http.py
+   ...   def process_request(request: dict, response: dict):
+   ...       response["headers"]["content-type"] = "text/html"
+   ...       response["content"] = pmnc("worker").work.handle(request)
+					               ^^^^^^ target method
+					          ^^^^ target module
+                                         ^^^^^^ target cage
+
+6. Click "Reload" in your browser, which is presumably still pointing to
+   http://localhost:8080/
+
+   <<<   Exception("ModuleNotFoundError("file work.py was not found") ...
+
+   Oops, indeed the requested module work.py does not present at the
+   worker cage.
+
+7. Create the module:
+
+   >>>   /usr/local/pythomnic3k$ cat > cages/worker/work.py
+   >>>   __all__ = [ "handle" ]
+   >>>   def handle(request):
+   >>>       return "Working on {0[url]:s}".format(request)
+   >>>   # EOF
+
+8. Click "Reload" in your browser:
+
+   <<<   Working on /
+
+   Notice how the actual processing of the request which arrived
+   to one cage is actually done by another.
+
+HOW TO MONITOR A RUNNING CAGE
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. Each cage collect its own runtime performance statistics as it runs.
+   Each cage also runs a built-in web server to monitor the statistics,
+   HTTP interface for the performance monitoring web server is configured
+   in .shared/config_interface_performance.py which by default starts
+   listening at a random port each time the cage runs.
+
+2. Therefore, find out the listening port for the cage's monitor:
+
+   >>>   /usr/local/pythomnic3k$ grep listening cages/runner/logs/runner-yyyymmdd.log
+   <<<   HH:MM:SS.ZZ MSG [performance:lsn] started listening for connections at 0.0.0.0:44615
+                                                                     random port number ^^^^^
+
+3. Point your browser to the discovered port http://localhost:44615
+
+   <<<            cage runner at node hostname
+   <<<           1 req(s), 2.5 req/s, 1.0 txn/s
+   <<<     clickable graphs, one per interface/resource ...
+
+4. (optional) Make a copy of the interface configuration file and edit
+   the copy to make the cage's monitor listen at a fixed port:
+
+   >>>   /usr/local/pythomnic3k$ cp cages/.shared/config_interface_performance.py cages/runner
+   >>>   /usr/local/pythomnic3k$ vi cages/runner/config_interface_performance.py
+   ...   listener_address = ("0.0.0.0", 1234)
+                                        ^^^^ port number
+   Note that you need to restart a cage whenever you modify any of its
+   interface's settings. This is by design and in contrast with the normal
+   behavior of transparent application modules reloading.
+
+- END OF FILE -
